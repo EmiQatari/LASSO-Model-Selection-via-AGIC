@@ -1,0 +1,129 @@
+
+
+### This function generates data from model with Cauchy noise
+#### n is number of your required sample
+#### p is number of all covariates in the model
+#### p_real1 is the number of non-zero coefficients in the model
+#### roh is correlation value 
+#### beta_real1 is the value of non-zero coefficients
+
+####Data-Generating
+multi_data=function(n,p,p_real1,roh,beta_real1){
+ # n Number of observations
+ # p Number of predictors included in model
+real_n=n
+#####
+beta1=rep(beta_real1,p_real1)
+beta01=rep(0,p-p_real1)
+beta=c(beta1,beta01)
+######
+CovMatrix <- outer(1:p, 1:p, function(x,y) {roh^abs(x-y)})
+x <- mvrnorm(real_n, rep(0,p), CovMatrix)
+y <- x%*%beta + rcauchy(n)
+
+result <- list("y"=y,"x"=x,"beta"=beta)
+  return(result)
+}
+
+# This function fit Cauchy-LASSO to the generated data
+#### y is the response vector
+#### x is covariate matrix
+#### lambda is a vector which contains the interval of possible regularization parameter values 
+####### 
+Classo=function(y,x,lambda){
+q=length(lambda)
+n=length(y)
+lam=0
+beta.lambda=matrix(0,ncol=ncol(x),nrow=q)
+pmat=0
+for(i in 1:q){
+fr <- function(beta) {
+  sum(log(1+(y-x%*%beta)^2))+1*lambda[i]*sum((abs(beta)))
+}
+beta.lambda[i,]=optim(lm(y~x-1)$coe,fr )$par
+pmat[i]=c(lambda[i])
+}
+
+beta.lambda[abs(beta.lambda)<0.001]=0
+list(lambda=pmat,Beta=beta.lambda)
+}
+############
+
+### This function does model selection for any number of iterations.
+#### itr is number of the iterations
+#### Dat is a list created from multi_data 
+#### q is a vector of possible lambda values in the experiment
+
+GIC.LASSO=function(itr,Dat,q){
+############
+lamaic=lambic=0
+aic=bic=G=dp=0
+beta1=matrix(0,ncol=itr,nrow=p)
+beta2=matrix(0,ncol=itr,nrow=p)
+###
+for(ia in 1:itr){
+GD=Dat[[ia]]
+    x <- as.matrix(GD$x)
+x=scale(x,scale=FALSE)
+    y <- as.matrix(GD$y)
+y<-scale(y,scale=FALSE)
+n=length(y)
+p=ncol(Dat[[1]]$x)
+CL=Classo(y,x,q)
+Beta1=CL$Beta
+#select lambda
+rp=length(q)
+for(ib in 1:rp){
+dp[ib]=length(Beta1[ib,][Beta1[ib,]!=0])
+}
+for(ic in 1:rp){
+G[ic]=log(1+sum((y-x%*%Beta1[ic,])^2))/n
+aic[ic]=G[ic]+(2*(dp[ic])/n)
+bic[ic]=G[ic]+(log(n)*(dp[ic])/n)
+}
+lamaic[ia]=q[which.min(aic)]
+lambic[ia]=q[which.min(bic)]
+###########
+beta1[,ia]=t(Classo(y,x,lamaic[ia])$B)
+beta2[,ia]=t(Classo(y,x,lambic[ia])$B)
+beta1[,ia][abs(beta1)[,ia]<=0.4]=0
+beta2[,ia][abs(beta1)[,ia]<=0.4]=0
+#print(ia)
+}
+return(list("beta.aic"=beta1,"beta.bic"=beta2,"lam.aic"=lamaic,"lam.bic"=lambic))
+}
+
+#### beta.aic is the coefficient vector obtained by aic criterion 
+#### beta.bic is the coefficient vector obtained by bic criterion 
+#### lam.aic is the optimum value of lambda based on aic criterion
+#### lam.bic is the optimum value of lambda based on bic criterion
+
+############### Example
+####
+###
+######
+library(glmnet)
+library(MASS)
+q=seq(0.01,3,by=0.01)
+########### input values for functions
+n1=50
+p_real1=4;beta_real1=4
+itr=1000
+p=10
+rho1=0.0
+
+### creating training data
+Dat50=list(0)
+for(i in 1:itr){
+set.seed(i+1400)
+Dat50[[i]]=multi_data(n1,p,p_real1,rho1,beta_real1)
+}
+####creating test data
+ntest=30
+set.seed(2019)
+Dat.test0=multi_data(ntest,p,p_real1,rho1,beta_real1)
+
+############# Model selection
+gic50=GIC.LASSO(itr,Dat50,q)
+
+#######
