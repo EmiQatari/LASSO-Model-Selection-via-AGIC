@@ -1,0 +1,502 @@
+###### Functions
+####Data-Generating
+multi_data=function(n,p,p_real1,p_real2,roh,rho,
+beta_real1,beta_real2){
+# n Number of observations
+# p Number of predictors included in model
+real_n=n
+beta1=rep(beta_real1,p_real1)
+beta01=rep(0,p-p_real1)
+beta11=c(beta1,beta01)
+beta2=rep(beta_real2,p_real2)
+beta02=rep(0,p-p_real2)
+beta22=c(beta2,beta02)
+beta=cbind(beta11,beta22)
+CovMatrix <- outer(1:p, 1:p, function(x,y) {roh^abs(x-y)})
+x <- mvrnorm(real_n, rep(0,p), CovMatrix)
+sig=matrix(c(1,rho,rho,1),2,2)
+y <- x%*%beta + mvrnorm(real_n, rep(0,2), sig)
+result <- list("y"=y,"x"=x,"beta"=beta)
+return(result)
+}
+#######
+GCV.Bridge=function(Dat,itr,alpha){
+Dev=function(x,y,yh){
+Dev=0
+Devj=0
+for(j in 1:n){
+Devj[j]=-2*(dmvnorm(y[j,],mean=(yh[j,]),
+sigma=(1/n)*t(y-yh)%*%(y-yh),log=TRUE))
+}
+sum(Devj)
+}
+DEV=0;lamagic=0;agic=0;beta1=list(0)
+for(ia in 1:itr){
+GD=Dat[[ia]]
+x <- as.matrix(GD$x)
+x=scale(x,scale=FALSE)
+p=ncol(x)
+y <- as.matrix(GD$y)
+y<-scale(y,scale=FALSE)
+#select lambda
+q=seq(0.0001,0.1,length=1000)
+rp=length(q);dalpha=dp2=dp1=dp=rep(0,rp)
+agic=0;sigma=0;sigma1=0;n=length(y[,1])
+for(i in 1:rp){
+fit.l<-gBridge(x,y,group=1:ncol(x),lambda=q[i],
+family=c("gaussian"),alpha=alpha)
+yh= predict(fit.l,x)
+DEV[i]=Dev(x,y,yh)
+f1=t(coef(fit.l))[-1,]
+dp1[i]=beta_r(f1[,1],p)
+dp2[i]=beta_r(f1[,2],p)	
+dp[i]=(dp1[i]+dp2[i])
+agic[i]=(1/n)*DEV[i]*(1/((1-(dp[i]/n))^2))
+}
+proc.time()
+lamagic[ia]=q[which.min(agic)]
+###########
+beta1[[ia]]=t(coef(gBridge(x,y,group=1:ncol(x),
+lambda=lamagic[ia],family=c("gaussian"),alpha=alpha)))[-1,]
+beta1[[ia]][beta1[[ia]]<=0.05]=0
+print(ia)
+}
+return(list("beta"=beta1,lam=lamagic))
+}
+##############################
+BIC.Bridge=function(Dat,itr,alpha){
+Dev=function(x,y,yh){
+Dev=0
+Devj=0
+for(j in 1:n){
+Devj[j]=-2*(dmvnorm(y[j,],mean=(yh[j,]),
+sigma=(1/n)*t(y-yh)%*%(y-yh),log=TRUE))
+}
+sum(Devj)
+}
+DEV=0;lamagic=0;agic=0;beta1=list(0)
+####
+for(ia in 1:itr){
+GD=Dat[[ia]]
+x <- as.matrix(GD$x)
+x=scale(x,scale=FALSE)
+p=ncol(x)
+y <- as.matrix(GD$y)
+y<-scale(y,scale=FALSE)
+#select lambda
+q=seq(0.0001,0.1,length=1000)
+rp=length(q);dalpha=dp2=dp1=dp=rep(0,rp)
+agic=0;sigma=0;sigma1=0;n=length(y[,1])
+for(i in 1:rp){
+fit.l<-gBridge(x,y,group=1:ncol(x),lambda=q[i],
+family=c("gaussian"),alpha=alpha)
+yh= predict(fit.l,x)
+DEV[i]=Dev(x,y,yh)
+f1=t(coef(fit.l))[-1,]
+dp1[i]=beta_r(f1[,1],p)
+dp2[i]=beta_r(f1[,2],p)	
+dp[i]=(dp1[i]+dp2[i])
+agic[i]=log((DEV[i])/n)+(log(n)*dp[i]/n)
+}
+lamagic[ia]=q[which.min(agic)]
+###########
+beta1[[ia]]=t(coef(gBridge(x,y,group=1:ncol(x),
+lambda=lamagic[ia],family=c("gaussian"),alpha=alpha)))[-1,]
+beta1[[ia]][beta1[[ia]]<=0.05]=0
+print(ia)
+}
+return(list("beta"=beta1,lam=lamagic))
+}
+###############
+MAGIC1.Bridge=function(Dat,itr,alpha){
+lamagic=0;agic=0;beta1=list(0)
+for(ia in 1:itr){
+GD=Dat[[ia]]
+x <- as.matrix(GD$x)
+x=scale(x,scale=FALSE)
+p=ncol(x)
+y <- as.matrix(GD$y)
+y<-scale(y,scale=FALSE)
+#select lambda
+q=seq(0.0001,0.15,length=1500)
+rp=length(q);dalpha=dp2=dp1=dp=rep(0,rp)
+agic=0;sigma=0;sigma1=0;n=length(y[,1])
+for(i in 1:rp){
+fit.l<-gBridge(x,y,group=1:ncol(x),lambda=q[i],
+family=c("gaussian"),alpha=alpha)
+yh= predict(fit.l,x)
+f1=t(coef(fit.l))[-1,]
+dp1[i]=beta_r(f1[,1],p)
+dp2[i]=beta_r(f1[,2],p)	
+dp[i]=(dp1[i]+dp2[i])
+sigma[i]=abs(det(var(yh-y)))
+sigma1[i]=sum((yh-y)^2)/n
+agic[i]=log(sigma[i])+(2*dp[i]/n)
+}
+lamagic[ia]=q[which.min(agic)]
+beta1[[ia]]=t(coef(gBridge(x,y,group=1:ncol(x),
+lambda=lamagic[ia],family=c("gaussian"),alpha=alpha)))[-1,]
+beta1[[ia]][beta1[[ia]]<=0.05]=0
+print(ia)
+}
+return(list("beta"=beta1,lam=lamagic))
+}
+####
+MAGIC2.Bridge=function(Dat,itr,alpha){
+lamagic=0;agic=0;beta1=list(0)
+for(ia in 1:itr){
+GD=Dat[[ia]]
+x <- as.matrix(GD$x)
+x=scale(x,scale=FALSE)
+p=ncol(x)
+y <- as.matrix(GD$y)
+y<-scale(y,scale=FALSE)
+#select lambda
+q=seq(0.0001,0.15,length=1500)
+rp=length(q);dalpha=dp2=dp1=dp=rep(0,rp)
+agic=0;sigma=0;sigma1=0;n=length(y[,1])
+for(i in 1:rp){
+fit.l<-gBridge(x,y,group=1:ncol(x),lambda=q[i],
+family=c("gaussian"),alpha=alpha)
+yh= predict(fit.l,x)
+f1=t(coef(fit.l))[-1,]
+dp1[i]=beta_r(f1[,1],p)
+dp2[i]=beta_r(f1[,2],p)	
+dp[i]=(dp1[i]+dp2[i])
+sigma[i]=abs(det(var(yh-y)))
+sigma1[i]=sum((yh-y)^2)/n
+agic[i]=log(sigma1[i])+(2*dp[i]/n)
+}
+lamagic[ia]=q[which.min(agic)]
+###########
+beta1[[ia]]=t(coef(gBridge(x,y,group=1:ncol(x),
+lambda=lamagic[ia],family=c("gaussian"),alpha=alpha)))[-1,]
+beta1[[ia]][beta1[[ia]]<=0.05]=0
+print(ia)
+}
+return(list("beta"=beta1,lam=lamagic))
+}
+#####
+MAIC1.Bridge=function(Dat,itr,alpha){
+lamagic=0;agic=0;beta1=list(0)
+####
+for(ia in 1:itr){
+GD=Dat[[ia]]
+x <- as.matrix(GD$x)
+x=scale(x,scale=FALSE)
+p=ncol(x)
+y <- as.matrix(GD$y)
+y<-scale(y,scale=FALSE)
+#select lambda
+q=seq(0.0001,0.15,length=1500)
+rp=length(q);dalpha=dp2=dp1=dp=rep(0,rp)
+agic=0;sigma=0;sigma1=0;n=length(y[,1])
+for(i in 1:rp){
+fit.l<-gBridge(x,y,group=1:ncol(x),lambda=q[i]
+,family=c("gaussian"),alpha=alpha)
+yh= predict(fit.l,x)
+f1=t(coef(fit.l))[-1,]
+dp1[i]=beta_r(f1[,1],p)
+dp2[i]=beta_r(f1[,2],p)	
+dp[i]=(dp1[i]+dp2[i])
+sigma[i]=abs(det(var(yh-y)))
+sigma1[i]=sum((yh-y)^2)/n
+agic[i]=log(sigma[i])+(2*sigma[i]*dp[i]/n)
+}
+lamagic[ia]=q[which.min(agic)]
+beta1[[ia]]=t(coef(gBridge(x,y,group=1:ncol(x),
+lambda=lamagic[ia],family=c("gaussian"),alpha=alpha)))[-1,]
+beta1[[ia]][beta1[[ia]]<=0.05]=0
+print(ia)
+}
+return(list("beta"=beta1,lam=lamagic))
+}
+#####
+MAIC2.Bridge=function(Dat,itr,alpha){
+############
+lamagic=0;agic=0;beta1=list(0)
+####
+for(ia in 1:itr){
+GD=Dat[[ia]]
+x <- as.matrix(GD$x)
+x=scale(x,scale=FALSE)
+p=ncol(x)
+y <- as.matrix(GD$y)
+y<-scale(y,scale=FALSE)
+#select lambda
+q=seq(0.0001,0.15,length=1500)
+rp=length(q);dalpha=dp2=dp1=dp=rep(0,rp)
+agic=0;sigma=0;sigma1=0;n=length(y[,1])
+for(i in 1:rp){
+fit.l<-gBridge(x,y,group=1:ncol(x),lambda=q[i]
+,family=c("gaussian"),alpha=alpha)
+yh= predict(fit.l,x)
+f1=t(coef(fit.l))[-1,]
+dp1[i]=beta_r(f1[,1],p)
+dp2[i]=beta_r(f1[,2],p)	
+dp[i]=(dp1[i]+dp2[i])
+sigma[i]=abs(det(var(yh-y)))
+sigma1[i]=sum((yh-y)^2)/n
+agic[i]=log(sigma1[i])+(2*sigma1[i]*dp[i]/n)
+}
+lamagic[ia]=q[which.min(agic)]
+###########
+beta1[[ia]]=t(coef(gBridge(x,y,group=1:ncol(x)
+,lambda=lamagic[ia],family=c("gaussian"),alpha=alpha)))[-1,]
+beta1[[ia]][beta1[[ia]]<=0.05]=0
+print(ia)
+}
+return(list("beta"=beta1,lam=lamagic))
+}
+#####
+MBIC1.Bridge=function(Dat,itr,alpha){
+lamagic=0
+agic=0
+beta1=list(0)
+####
+for(ia in 1:itr){
+GD=Dat[[ia]]
+x <- as.matrix(GD$x)
+x=scale(x,scale=FALSE)
+p=ncol(x)
+y <- as.matrix(GD$y)
+y<-scale(y,scale=FALSE)
+#select lambda
+q=seq(0.0001,0.15,length=1500)
+rp=length(q);dalpha=dp2=dp1=dp=rep(0,rp)
+agic=0;sigma=0;sigma1=0;n=length(y[,1])
+n=length(y[,1])
+for(i in 1:rp){
+fit.l<-gBridge(x,y,group=1:ncol(x),lambda=q[i]
+,family=c("gaussian"),alpha=alpha)
+yh= predict(fit.l,x)
+f1=t(coef(fit.l))[-1,]
+dp1[i]=beta_r(f1[,1],p)
+dp2[i]=beta_r(f1[,2],p)	
+dp[i]=(dp1[i]+dp2[i])
+sigma[i]=abs(det(var(yh-y)))
+sigma1[i]=sum((yh-y)^2)/n
+agic[i]=log(sigma[i])+(log(n)*dp[i]/n)
+}
+lamagic[ia]=q[which.min(agic)]
+beta1[[ia]]=t(coef(gBridge(x,y,group=1:ncol(x)
+,lambda=lamagic[ia],family=c("gaussian"),alpha=alpha)))[-1,]
+beta1[[ia]][beta1[[ia]]<=0.05]=0
+print(ia)
+}
+return(list("beta"=beta1,lam=lamagic))
+}
+#####
+MBIC2.Bridge=function(Dat,itr,alpha){
+############
+lamagic=0;agic=0;beta1=list(0)
+####
+for(ia in 1:itr){
+GD=Dat[[ia]]
+x <- as.matrix(GD$x)
+x=scale(x,scale=FALSE)
+p=ncol(x)
+y <- as.matrix(GD$y)
+y<-scale(y,scale=FALSE)
+#select lambda
+q=seq(0.0001,0.15,length=1500)
+rp=length(q);dalpha=dp2=dp1=dp=rep(0,rp)
+agic=0;sigma=0;sigma1=0;n=length(y[,1])
+n=length(y[,1])
+for(i in 1:rp){
+fit.l<-gBridge(x,y,group=1:ncol(x),lambda=q[i]
+,family=c("gaussian"),alpha=alpha)
+yh= predict(fit.l,x)
+f1=t(coef(fit.l))[-1,]
+dp1[i]=beta_r(f1[,1],p)
+dp2[i]=beta_r(f1[,2],p)	
+dp[i]=(dp1[i]+dp2[i])
+sigma[i]=abs(det(var(yh-y)))
+sigma1[i]=sum((yh-y)^2)/n
+agic[i]=log(sigma1[i])+(log(n)*dp[i]/n)
+}
+lamagic[ia]=q[which.min(agic)]
+beta1[[ia]]=t(coef(gBridge(x,y,group=1:ncol(x),
+lambda=lamagic[ia],family=c("gaussian"),alpha=alpha)))[-1,]
+beta1[[ia]][beta1[[ia]]<=0.05]=0
+print(ia)
+}
+return(list("beta"=beta1,lam=lamagic))
+}
+########################
+MBIC3.Bridge=function(Dat,itr,alpha){
+lamagic=0;agic=0;beta1=list(0)
+####
+for(ia in 1:itr){
+GD=Dat[[ia]]
+x <- as.matrix(GD$x)
+x=scale(x,scale=FALSE)
+p=ncol(x)
+y <- as.matrix(GD$y)
+y<-scale(y,scale=FALSE)
+#select lambda
+q=seq(0.0001,0.15,length=1500)
+rp=length(q);dalpha=dp2=dp1=dp=rep(0,rp)
+agic=0;sigma=0;sigma1=0;n=length(y[,1])
+n=length(y[,1])
+for(i in 1:rp){
+fit.l<-gBridge(x,y,group=1:ncol(x),lambda=q[i],
+family=c("gaussian"),alpha=alpha)
+yh= predict(fit.l,x)
+f1=t(coef(fit.l))[-1,]
+dp1[i]=beta_r(f1[,1],p)
+dp2[i]=beta_r(f1[,2],p)	
+dp[i]=(dp1[i]+dp2[i])
+sigma[i]=abs(det(var(yh-y)))
+sigma1[i]=sum((yh-y)^2)/n
+agic[i]=log(sigma[i])+((n^(1/3))*dp[i]/n)
+}
+lamagic[ia]=q[which.min(agic)]
+###########
+beta1[[ia]]=t(coef(gBridge(x,y,group=1:ncol(x),
+lambda=lamagic[ia],family=c("gaussian"),alpha=alpha)))[-1,]
+beta1[[ia]][beta1[[ia]]<=0.05]=0
+print(ia)
+}
+return(list("beta"=beta1,lam=lamagic))
+}
+#######
+MBIC4.Bridge=function(Dat,itr,alpha){
+lamagic=0;agic=0;beta1=list(0)
+####
+for(ia in 1:itr){
+GD=Dat[[ia]]
+x <- as.matrix(GD$x)
+x=scale(x,scale=FALSE)
+p=ncol(x)
+y <- as.matrix(GD$y)
+y<-scale(y,scale=FALSE)
+#select lambda
+q=seq(0.0001,0.15,length=1500)
+rp=length(q);dalpha=dp2=dp1=dp=rep(0,rp)
+agic=0;sigma=0;sigma1=0;n=length(y[,1])
+for(i in 1:rp){
+fit.l<-gBridge(x,y,group=1:ncol(x),lambda=q[i],
+family=c("gaussian"),alpha=alpha)
+yh= predict(fit.l,x)
+f1=t(coef(fit.l))[-1,]
+dp1[i]=beta_r(f1[,1],p)
+dp2[i]=beta_r(f1[,2],p)	
+dp[i]=(dp1[i]+dp2[i])
+sigma[i]=abs(det(var(yh-y)))
+sigma1[i]=sum((yh-y)^2)/n
+agic[i]=log(sigma1[i])+((n^(1/3))*dp[i]/n)
+}
+lamagic[ia]=q[which.min(agic)]
+beta1[[ia]]=t(coef(gBridge(x,y,group=1:ncol(x),lambda=lamagic[ia],
+family=c("gaussian"),alpha=alpha)))[-1,]
+beta1[[ia]][beta1[[ia]]<=0.05]=0
+print(ia)
+}
+return(list("beta"=beta1,lam=lamagic))
+}	
+######
+chosen=function(b){
+b[abs(b)<=0.01]=0
+m=nrow(b)
+p=1:(nrow(b))
+for(i in 1:m){
+if(b[i,1]==0&b[i,2]==0){
+p[i]=0
+}
+}
+chosen=p[p!=0]
+return("chosen"=chosen)
+}
+####
+varnum=function(dat){
+n1=0
+for(i in 1:length(dat)){
+n1[i]=length(dat[[i]])
+}
+nbar=mean(n1);nsd=sd(n1)
+return(list(nbar=nbar,n=n1,nsd=nsd))
+}
+####
+MSEh=function(dat,O){
+O[abs(O)<=0.01]=0
+yt=dat$y
+nt=length(yt)
+xt=dat$x
+Beta=O;
+k=length(Beta[Beta!=0])
+E=xt%*%Beta-yt
+MSEc=(1/(nt-k))*sum(mahalanobis(E,rep(0,ncol(yt)),cov=cov(E)))
+return(MSEc)
+}
+#####Run
+library(MASS)
+library(Matrix)
+library(mvtnorm)
+library(grpreg)
+library(xtable)
+#######
+####
+###
+alpha4=1
+itr=500;n1=200;p1=40;p_real1=5;p_real2=10
+rho1=0.25;roh1=0.25;beta_real1=3;beta_real2=4
+#########
+set.seed(1374)
+Dat.test2540=multi_data(100,p1,p_real1,p_real2,roh1,
+rho1,beta_real1,beta_real2)
+############################run-training data
+Dat325401=list(0)
+for(i in 1:itr){
+set.seed(1771+i)
+Dat325401[[i]]=multi_data(n1,p1,p_real1,p_real2,roh1,rho1,
+beta_real1,beta_real2)
+}
+#############selection
+MAIC2325401B=MAIC2.Bridge(Dat325401,itr,alpha4)
+MBIC1325401B=MBIC1.Bridge(Dat325401,itr,alpha4)
+MBIC3325401B=MBIC3.Bridge(Dat325401,itr,alpha4)
+MAGIC2325401B=MAGIC2.Bridge(Dat325401,itr,alpha4)
+CV325401B=CV.Bridge(Dat325401,itr,alpha4)
+GCV325401B=GCV.Bridge(Dat325401,itr,alpha4)
+BIC325401B=BIC.Bridge(Dat325401,itr,alpha4)
+######varnum and variable selection
+chMAIC2325401B=list(0)
+chMBIC1325401B=list(0)
+chMBIC3325401B=list(0)
+chMAGIC2325401B=list(0)
+chCV325401B=list(0)
+chGCV325401B=list(0)
+chBIC325401B=list(0)
+for(i in 1:itr){
+chMAIC2325401B[[i]]=chosen(MAIC2325401B$beta[[i]])
+chMBIC1325401B[[i]]=chosen(MBIC1325401B$beta[[i]])
+chMBIC3325401B[[i]]=chosen(MBIC3325401B$beta[[i]])
+chMAGIC2325401B[[i]]=chosen(MAGIC2325401B$beta[[i]])
+chGCV325401B[[i]]=chosen(GCV325401B$beta[[i]])
+chCV325401B[[i]]=chosen(CV325401B$beta[[i]])
+chBIC325401B[[i]]=chosen(BIC325401B$beta[[i]])
+}
+####
+varnum(chMAIC2325401B)
+varnum(chMBIC1325401B)
+varnum(chMBIC3325401B)
+varnum(chMAGIC2325401B)
+varnum(chCV325401B)
+varnum(chGCV325401B)
+varnum(chBIC325401B)
+######
+MSEAIC2325401Hc=MSEBIC1325401Hc=MSEBIC3325401Hc=0
+MSEBIC325401Hc=MSEAGIC2325401Hc=MSECV325401Hc=MSEGCV325401Hc=0
+for(i in 1:itr){
+MSEAIC2325401Hc[i]=MSEh(Dat.test2540,MAIC2325401B$beta[[i]])
+MSEBIC1325401Hc[i]=MSEh(Dat.test2540,MBIC1325401B$beta[[i]])
+MSEBIC3325401Hc[i]=MSEh(Dat.test2540,MBIC3325401B$beta[[i]])
+MSEAGIC2325401Hc[i]=MSEh(Dat.test2540,MAGIC2325401B$beta[[i]])
+MSECV325401Hc[i]=MSEh(Dat.test2540,CV325401B$beta[[i]])
+MSEGCV325401Hc[i]=MSEh(Dat.test2540,GCV325401B$beta[[i]])
+MSEBIC325401Hc[i]=MSEh(Dat.test2540,BIC325401B$beta[[i]])
+}
+MSE325401Hc=c(mean(MSEAIC2325401Hc),mean(MSEAGIC2325401Hc)
+,mean(MSEBIC1325401Hc),mean(MSEBIC3325401Hc),mean(MSECV325401Hc)
+,mean(MSEGCV325401Hc),mean(MSEBIC325401Hc))
