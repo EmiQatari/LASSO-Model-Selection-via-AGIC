@@ -1,0 +1,161 @@
+library(MASS)
+library(Matrix)
+library(mvtnorm)
+library(grpreg)
+#######
+############
+multi_data=function(n,p,p_real1,p_real2,roh,rho,beta_real1,beta_real2){
+ # n Number of observations
+ # p Number of predictors included in model
+real_n=n
+#####
+beta1=rep(beta_real1,p_real1)
+beta01=rep(0,p-p_real1)
+beta11=c(beta1,beta01)
+#######
+beta2=rep(beta_real2,p_real2)
+beta02=rep(0,p-p_real2)
+beta22=c(beta2,beta02)
+beta=cbind(beta11,beta22)
+######
+CovMatrix <- outer(1:p, 1:p, function(x,y) {roh^abs(x-y)})
+x <- mvrnorm(real_n, rep(0,p), CovMatrix)
+sig=matrix(c(16,rho*4*5,rho*4*5,25),2,2)
+y <- x%*%beta + mvrnorm(real_n, rep(0,2), sig)
+
+result <- list("y"=y,"x"=x,"beta"=beta)
+  return(result)
+}
+##############
+beta_r=function(beta,p){
+qq=0
+for(i in 1:p){
+if(abs(beta[i])<=0){
+qq=qq+1
+}
+}
+o=p-qq
+return(o)
+}
+########
+lam.rate=function(n,p,alpha,roh,rho,seed){
+t1=proc.time()
+p_real1=5
+p_real2=10
+beta_real1=3
+beta_real2=4
+set.seed(seed)
+Dat=multi_data(n,p,p_real1,p_real2,roh,rho,beta_real1,beta_real2)
+B=Dat$beta
+lamagic=0
+lamagic2=0
+lamagic3=0
+lamagic4=0
+####
+g=seq(2,200,by=2)
+K=length(g)
+for(ia in 1:K){
+GD=Dat
+    x <- as.matrix(GD$x)[,1:g[ia]]
+	x=scale(x,scale=FALSE)
+	p=ncol(x)
+    y <- as.matrix(GD$y)
+	y<-scale(y,scale=FALSE)
+	#select lambda
+	q=seq(0.0001,1,length=10000)
+	rp=length(q)
+	dp=rep(0,rp)
+	dp1=rep(0,rp)
+	dp2=rep(0,rp)
+	dalpha=rep(0,rp)
+	agic=0
+	agic2=0
+	agic3=0
+	agic4=0
+	sigma=0
+	sigma1=0
+	n=length(y[,1])
+
+for(i in 1:rp){
+	fit.l<-gBridge(x,y,group=1:ncol(x),lambda=q[i],family=c("gaussian"),alpha=alpha)
+
+	yh= predict(fit.l,x)
+	f1=t(coef(fit.l))[-1,]
+		dp1[i]=beta_r(f1[,1],p)
+		dp2[i]=beta_r(f1[,2],p)	
+		dp[i]=(dp1[i]+dp2[i])
+
+		sigma[i]=abs(det(var(yh-y)))
+		sigma1[i]=sum((yh-y)^2)/n
+		agic[i]=log(sigma1[i])+(2*sigma1[i]*dp[i]/n)#AIC
+		agic2[i]=log(sigma[i])+(log(n)*dp[i]/n)#MBIC1
+		agic3[i]=log(sigma[i])+((n^(1/3))*dp[i]/n)#MBIC2
+		agic4[i]=log(sigma1[i])+(2*dp[i]/n)#MAGIC
+
+}
+
+	lamagic[ia]=q[which.min(agic)]
+	lamagic2[ia]=q[which.min(agic2)]
+	lamagic3[ia]=q[which.min(agic3)]
+	lamagic4[ia]=q[which.min(agic4)]	
+#print(ia)
+}
+z=cbind(lamagic,lamagic2,lamagic3,lamagic4)
+return(z)
+}
+####
+ 
+####
+
+####################run
+
+###
+alpha1=0.25
+alpha2=0.5
+alpha3=0.75
+alpha4=1
+itr=20
+n1=150
+p1=200
+rho1=0.25
+roh1=0.25
+roh2=0.5
+roh3=0.75
+seed=13710
+
+##########
+############################run
+##-Condition-1########rohx=0.25,alhpa=0.25
+CDL2525=list(0)
+for(i in 1:itr){
+CDL2525[[i]]=lam.rate(n1,p1,alpha1,roh1,rho1,(seed+i))
+print(i)
+}
+##########
+##########
+############################run
+##-Condition-2########rohx=0.25,alhpa=0.5
+CDL2525=list(0)
+for(i in 1:itr){
+CDL2525[[i]]=lam.rate(n1,p1,alpha2,roh1,rho1,(seed+i))
+print(i)
+}
+##########
+##########
+############################run
+##-Condition-3########rohx=0.25,alhpa=0.75
+CDL2525=list(0)
+for(i in 1:itr){
+CDL2525[[i]]=lam.rate(n1,p1,alpha3,roh1,rho1,(seed+i))
+print(i)
+}
+##########
+##########
+############################run
+##-Condition-4########rohx=0.25,alhpa=1
+CDL2525=list(0)
+for(i in 1:itr){
+CDL2525[[i]]=lam.rate(n1,p1,alpha4,roh1,rho1,(seed+i))
+print(i)
+}
+##########
